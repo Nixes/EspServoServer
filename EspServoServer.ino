@@ -1,148 +1,168 @@
 #include <ESP8266WiFi.h>
+#include <WiFiUDP.h>
 #include <Servo.h>
 
 #define DEBUG
 
 // network stuff START
-    const char* ssid     = ""; // <<<<<<<<< wifi network name here
-    const char* password = ""; // <<<<<<<<< wifi password here
+  const char* ssid     = ""; // <<<<<<<<< wifi network name here
+  const char* password = ""; // <<<<<<<<< wifi password here
 
-    const int port = 5643;
-    WiFiServer server (port);
+  const int port = 5643;
+  WiFiUDP server;
 
-    unsigned long packetTimer;
-    unsigned int packetCount;
+  unsigned long packetTimer;
+  unsigned int packetCount;
 // network stuff END
 
 // servo stuff START
-    Servo servoX;
-    Servo servoY;
+  Servo PanX;
+  Servo TiltY;
 
-    const bool servoX_invert  = true;
-    const bool servoY_invert  = false;
+  const bool PanX_invert  = true;
+  const bool TiltY_invert  = false;
 
-    const int servoYPos_min = 50;
-    const int servoXPos_min = 0;
+  const int TiltYPos_min = 50;
+  const int PanXPos_min = 0;
 
-    const int servoYPos_max = 120;
-    const int servoXPos_max = 180; // confirmed with servo range test
+  const int TiltYPos_max = 120;
+  const int PanXPos_max = 180; // confirmed with servo range test
 
-    unsigned long servoTimeout = millis(); // saves the lives of shitty hobby servos
+  unsigned long servoTimeout = millis(); // time since a servo command was recieved
 // servo stuff END
 
-// TODO: move into servo validation section
-void servoSet(int servoXPos,int servoYPos) {
-
-
-    servoTimeout = millis(); // reset servo timeout
+int setMinMax(const int* min,const int* max,int* value) {
+  int newValue;
+  if (value > max) {
+    newValue = *max;
+  } else if (value < min) {
+    newValue = *min;
+  }
+  return newValue;
 }
 
-void servoValidate(int servoXPos,int servoYPos)  {
-    // do some input validation
-	if (servoYPos >= servoYPos_min && servoYPos <= servoYPos_max) {
-		#ifdef DEBUG
-			Serial.println("Y value passed validation");
-		#endif
-        int final_ServoYPos;
-        if (servoY_invert) {
-            final_ServoYPos = 180 - servoYPos;
-        } else {
-            final_ServoYPos = servoYPos;
-        }
-        servoY.attach(D2);
-        servoY.write(final_ServoYPos);
-	}
+void servoValidate(int PanXPos,int TiltYPos)  {
+  // do some input validation
+  if (TiltYPos >= TiltYPos_min && TiltYPos <= TiltYPos_max) {
     #ifdef DEBUG
-    else {
-			Serial.print("Y value failed validation, was: ");
-			Serial.println(servoYPos);
-    }
+    Serial.print("Tilt value passed validation = ");
+    Serial.println(TiltYPos);
     #endif
+    int final_TiltYPos;
+    if (TiltY_invert) {
+      final_TiltYPos = 180 - TiltYPos;
+    } else {
+      final_TiltYPos = TiltYPos;
+    }
+    #ifdef DEBUG
+    Serial.print("Final Tilt Value = ");
+    Serial.println(final_TiltYPos);
+    #endif
+    TiltY.attach(D2);
+    TiltY.write(final_TiltYPos);
+    servoTimeout = millis(); // reset servo timeout
+  }
+  #ifdef DEBUG
+  else {
+    Serial.print("Tilt value failed validation, was: ");
+    Serial.println(TiltYPos);
+    TiltY.attach(D2);
+    TiltY.write(setMinMax(&TiltYPos_min,&TiltYPos_max,&TiltYPos));
+    servoTimeout = millis(); // reset servo timeout
+  }
+  #endif
 
-	if (servoXPos >= servoXPos_min && servoXPos <= servoXPos_max) {
-		#ifdef DEBUG
-			Serial.println("X value passed validation");
-		#endif
-        int final_ServoXPos;
-        if (servoX_invert) {
-           final_ServoXPos = 180 - servoXPos;
-        } else {
-            final_ServoXPos = servoXPos;
-        }
-        servoX.attach(D1);
-        servoX.write(final_ServoXPos);
-	}
+  if (PanXPos >= PanXPos_min && PanXPos <= PanXPos_max) {
     #ifdef DEBUG
-    else {
-			Serial.print("X value failed validation, was: ");
-			Serial.println(servoXPos);
-    }
+    Serial.print("Pan value passed validation = ");
+    Serial.println(TiltYPos);
     #endif
-	//servoSet(servoXPos,servoYPos);
+    int final_PanXPos;
+    if (PanX_invert) {
+      final_PanXPos = 180 - PanXPos;
+    } else {
+      final_PanXPos = PanXPos;
+    }
+    #ifdef DEBUG
+    Serial.print("Final Pan Value = ");
+    Serial.println(final_PanXPos);
+    #endif
+    PanX.attach(D1);
+    PanX.write(final_PanXPos);
+    servoTimeout = millis(); // reset servo timeout
+  }
+  #ifdef DEBUG
+  else {
+    Serial.print("Pan value failed validation, was: ");
+    Serial.println(PanXPos);
+    PanX.attach(D1);
+    PanX.write(setMinMax(&PanXPos_min,&PanXPos_min,&PanXPos));
+    servoTimeout = millis(); // reset servo timeout
+  }
+  #endif
+  //servoSet(PanXPos,TiltYPos);
 }
 
 void setup() {
-    Serial.begin(115200);
-    delay(100);
+  Serial.begin(115200);
+  delay(100);
 
-    Serial.println();
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    // We start by connecting to a WiFi network
-    WiFi.begin(ssid, password);
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  // We start by connecting to a WiFi network
+  WiFi.begin(ssid, password);
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
 
-    server.begin(); // start tcp server
+  server.begin(port); // start udp server
+  Serial.print("UDP Server Ready on port: ");
+  Serial.println(port);
 
-    packetTimer = millis();
-    packetCount = 0;
+  packetTimer = millis();
+  packetCount = 0;
 }
 
 
 void loop() {
-  WiFiClient client = server.available();
-  if (client) {
-    Serial.println("new client");
-    // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {
-      if (client.available()) {
-        char startbyte = client.read(); // read looks like it consumes the value
-        if (startbyte == 0xFE) {
-          char posx = client.read();
-          char posy = client.read();
-          char stopbyte = client.read();
-          if (stopbyte == 0xFF) {
-            //Serial.println("VALID PACKET");
-            // do some stuff
-            //int servoYPos = (int)posx;int servoXPos = (int)posy;
-            servoValidate( (int)posx,(int)posy);
-
-            // measure some stuff
-            packetCount++;
-            if (packetTimer + 1000 < millis()) {
-                Serial.print("    Packets/Sec: ");
-                Serial.println(packetCount);
-                packetCount=0;
-                packetTimer=millis();
-            }
+  int cb = server.parsePacket();
+  if (!cb) {
+    //Serial.println("no packet yet");
+  } else {
+    while (server.available()) {
+      char startbyte = server.read(); // read looks like it consumes the value
+      if (startbyte == 0xFE) {
+        char pan = server.read();
+        char tilt = server.read();
+        char stopbyte = server.read();
+        if (stopbyte == 0xFF) {
+          //Serial.println("VALID PACKET");
+          // do some stuff
+          servoValidate( (int)pan,(int)tilt);
+          delay(20); // needed to allow servos to do stuff
+          // measure some stuff
+          packetCount++;
+          if (packetTimer + 1000 < millis()) {
+            Serial.print("    Packets/Sec: ");
+            Serial.println(packetCount);
+            packetCount=0;
+            packetTimer=millis();
           }
         }
       }
     }
   }
-    if ( (millis()-servoTimeout) > 1000) { // gives dodgey servos that twitch a break
-        servoX.detach();
-        servoY.detach();
-    }
+  if ( (millis()-servoTimeout) > 1000) { // gives dodgey servos that twitch a break
+    PanX.detach();
+    TiltY.detach();
+  }
 }
